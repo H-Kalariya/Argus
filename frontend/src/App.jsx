@@ -6,6 +6,7 @@ function App() {
   const [isRecording, setIsRecording] = useState(false)
   const [videoUrl, setVideoUrl] = useState(null)
   const [countdown, setCountdown] = useState(null)
+  const [semanticResult, setSemanticResult] = useState(null)
   
   const videoRef = useRef(null)
   const mediaRecorderRef = useRef(null)
@@ -32,6 +33,7 @@ function App() {
       const data = await response.json()
       setChallenge(data)
       setVideoUrl(null)
+      setSemanticResult(null)
     } catch (err) {
       console.error("Error fetching challenge:", err)
     }
@@ -39,6 +41,7 @@ function App() {
 
   const startRecording = () => {
     setVideoUrl(null)
+    setSemanticResult(null)
     chunksRef.current = []
     const stream = videoRef.current.srcObject
     if (!stream) return
@@ -47,10 +50,29 @@ function App() {
     mediaRecorderRef.current.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data)
     }
-    mediaRecorderRef.current.onstop = () => {
+    mediaRecorderRef.current.onstop = async () => {
       const blob = new Blob(chunksRef.current, { type: 'video/webm' })
       const url = URL.createObjectURL(blob)
       setVideoUrl(url)
+      
+      // Upload to backend
+      if (challenge) {
+        const formData = new FormData()
+        formData.append('instruction', challenge.instruction)
+        formData.append('video', blob, 'challenge.webm')
+        
+        try {
+          const response = await fetch('http://localhost:8000/verify/semantic', {
+            method: 'POST',
+            body: formData
+          })
+          const result = await response.json()
+          console.log("Semantic Verification Result:", result)
+          setSemanticResult(result)
+        } catch (err) {
+          console.error("Upload error:", err)
+        }
+      }
     }
     mediaRecorderRef.current.start()
     setIsRecording(true)
@@ -123,6 +145,13 @@ function App() {
         <div className="preview-container">
           <h2>Recorded Preview</h2>
           <video src={videoUrl} controls className="preview-video" />
+          
+          {semanticResult && (
+            <div className="result-box">
+              <h3>Semantic Verification Result:</h3>
+              <pre>{JSON.stringify(semanticResult, null, 2)}</pre>
+            </div>
+          )}
         </div>
       )}
     </div>

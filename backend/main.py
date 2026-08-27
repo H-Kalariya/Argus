@@ -1,6 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, Form, File
 from fastapi.middleware.cors import CORSMiddleware
 import random
+import tempfile
+import os
+from semantic import verify_semantic_video
 
 app = FastAPI()
 
@@ -90,3 +93,19 @@ def health_check():
 @app.get("/challenge")
 def get_challenge():
     return generate_challenge()
+
+@app.post("/verify/semantic")
+async def verify_semantic(instruction: str = Form(...), video: UploadFile = File(...)):
+    # Save the uploaded video temporarily
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".webm")
+    temp_file.write(await video.read())
+    temp_file.close()
+    
+    try:
+        result = verify_semantic_video(temp_file.name, instruction)
+        return result.model_dump()
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        os.unlink(temp_file.name)
+
