@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+opencv-python
+mediapipe
+networkx
+python-dotenv
+razorpay
+google-genai
+python-multipart
