@@ -2,9 +2,26 @@ from google import genai
 from pydantic import BaseModel, Field
 from typing import Optional
 import os
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _wait_until_active(client, file_obj, timeout: int = 120, poll: float = 1.0):
+    """Poll an uploaded file until it reaches ACTIVE state before use."""
+    deadline = time.time() + timeout
+    current = file_obj
+    while time.time() < deadline:
+        state = getattr(current.state, "name", str(current.state))
+        if state == "ACTIVE":
+            return current
+        if state == "FAILED":
+            raise RuntimeError(f"File {current.name} failed processing.")
+        time.sleep(poll)
+        current = client.files.get(name=current.name)
+    raise TimeoutError(f"File {current.name} did not become ACTIVE within {timeout}s.")
+
 
 class SemanticResult(BaseModel):
     action_performed: bool = Field(description="Did the user perform the described physical action?")
@@ -14,8 +31,14 @@ class SemanticResult(BaseModel):
     semantic_pass: bool = Field(description="Overall pass/fail for the semantic check")
 
 def verify_semantic_video(video_path: str, instruction: str) -> SemanticResult:
-    client = genai.Client()
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "No API key found. Set GEMINI_API_KEY (or GOOGLE_API_KEY) in your .env file."
+        )
+    client = genai.Client(api_key=api_key)
     video_file = client.files.upload(file=video_path)
+    video_file = _wait_until_active(client, video_file)
     
     prompt = f"""
     You are a semantic verification system reviewing a video of a user performing a security challenge.
@@ -28,7 +51,7 @@ def verify_semantic_video(video_path: str, instruction: str) -> SemanticResult:
     """
     
     response = client.models.generate_content(
-        model='gemini-2.5-flash',
+        model='gemini-3.6-flash',
         contents=[video_file, prompt],
         config={
             'response_mime_type': 'application/json',
