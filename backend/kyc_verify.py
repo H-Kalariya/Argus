@@ -24,6 +24,26 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Model can be overridden via env var (useful when hitting quota on one model).
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+
+
+def _retry_call(fn, max_retries=3, base_delay=3.0):
+    """Retry a Gemini API call with exponential backoff on rate-limit errors."""
+    import time as _time
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                wait = base_delay * (2 ** attempt)
+                _time.sleep(wait)
+            else:
+                raise
+    # Final attempt, let it raise
+    return fn()
+
 
 def _upload(client, path: str, mime_type: str, label: str):
     """Upload a file with an explicit MIME type."""
@@ -100,52 +120,79 @@ def verify_kyc(
     ref_audio_file = _wait_until_active(client, ref_audio_file, "Reference audio")
     video_file = _wait_until_active(client, video_file, "Challenge video")
 
-    prompt = f"""You are a biometric KYC verification system for online payment authorization. 
+    prompt = f"""You are a strict biometric KYC verification system for high-value payment authorization.
 You are given three inputs:
-1. A REFERENCE FACE IMAGE — this is the enrolled user's face (ground truth identity).
-2. A REFERENCE VOICE AUDIO — this is the enrolled user's voice sample (ground truth voice).
-3. A CHALLENGE VIDEO (with audio) — recorded just now during the payment verification step.
+1. A REFERENCE FACE IMAGE — the enrolled user's face (ground truth).
+2. A REFERENCE VOICE AUDIO — the enrolled user's voice (ground truth).
+3. A CHALLENGE VIDEO (with audio) — supposedly recorded live just now.
 
 The user was instructed to:
 - Physical action: "{instruction}"
-- Speak this exact phrase: "{spoken_phrase}"
+- Speak this EXACT phrase: "{spoken_phrase}"
 
-Your job is to verify ALL of the following:
+Verify ALL of the following with STRICT criteria:
 
-**FACE MATCH:** Compare the face in the challenge video against the reference image. 
-Are they the same person? Consider facial structure, features, proportions. 
-Be strict — this is a payment authorization. Rate confidence 0.0 to 1.0.
+**FACE MATCH:** Is the person in the video the same as the reference image?
+Rate confidence 0.0 to 1.0. Be strict.
 
-**VOICE MATCH:** Compare the voice/speech in the challenge video against the reference audio. 
-Is it the same speaker? Consider pitch, timbre, speaking style, accent.
-Be strict — this is a payment authorization. Rate confidence 0.0 to 1.0.
+**VOICE MATCH:** Is the speaker the same as the reference audio?
+Rate confidence 0.0 to 1.0. Be strict.
 
-**ACTION VERIFICATION:** Did the person in the video actually perform the instructed physical action?
+**ACTION VERIFICATION:** Did they actually perform the specific instructed action?
 
-**SPEECH VERIFICATION:** Did the person say the exact phrase "{spoken_phrase}"? 
-Transcribe what they actually said.
+**SPEECH VERIFICATION:** Did they say EXACTLY "{spoken_phrase}"?
+Transcribe what they actually said. Even one wrong digit = fail.
 
-**LIVENESS:** Does this appear to be a live, present person? Look for:
-- Natural head movements, blinking, micro-expressions
-- Consistent lighting on face matching the environment  
-- No screen/display edges visible (which would indicate a replay attack)
-- No unnatural stillness or artifacting
+**LIVENESS (CRITICAL — be extremely strict here):**
+This is the most important check. You must determine if this is a LIVE person 
+or a REPLAY ATTACK (someone playing a pre-recorded video on a phone/screen).
 
-**OVERALL:** Pass KYC only if ALL of the above pass (face match confidence >= 0.6, 
-voice match confidence >= 0.5, action performed, correct phrase spoken, liveness confirmed).
+IMPORTANT CONTEXT: The challenge was revealed to the user DURING recording:
+- The physical action instruction appeared 1 second into the recording
+- The spoken phrase appeared 4 seconds into the recording
+Therefore, the user should NOT start the action in the very first second, and 
+should NOT speak the phrase before ~4 seconds in. If the action starts immediately 
+at frame 0 or the phrase is spoken in the first 3 seconds, this is strong evidence 
+of a pre-recorded replay attack.
+
+Signs of a REPLAY ATTACK (any ONE = liveness FAIL):
+- The video appears to be of a screen/display (look for: pixel grid texture, 
+  slight color banding, unnaturally uniform lighting across the face, 
+  screen reflections/glare, slight barrel/pincushion distortion from filming a flat surface)
+- The face appears perfectly flat with no real 3D depth cues
+- Lighting on the face doesn't match what you'd expect from a webcam pointed at a real person
+- The background looks like it's on a screen (too sharp edges, UI elements, notification bars)
+- Motion looks like it's from a recording (too smooth, no micro-jitter from handheld device)
+- The spoken phrase sounds like it's coming through a speaker (tinny, compressed audio quality 
+  vs. direct microphone capture)
+
+Signs of a LIVE person:
+- Natural 3D depth in the face (nose shadow, cheek contour responding to light)
+- Micro-movements and slight imperfections in motion
+- Direct microphone audio quality (room reverb, natural dynamics)
+- Background is a real environment (not a flat image)
+- Reactive behavior (slight adjustments, natural pauses)
+
+If you CANNOT confidently determine liveness, default to FAIL (false reject is safer 
+than false accept in payment authorization).
+
+**OVERALL:** Pass ONLY if ALL checks pass (face >= 0.6, voice >= 0.5, 
+action correct, exact phrase spoken, AND liveness confirmed).
 """
 
     try:
-        response = client.models.generate_content(
-            model='gemini-3.6-flash',
-            contents=[ref_image_file, ref_audio_file, video_file, prompt],
-            config={
-                'response_mime_type': 'application/json',
-                'response_schema': KYCResult,
-                'temperature': 0.1,
-            },
-        )
+        def _call():
+            return client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[ref_image_file, ref_audio_file, video_file, prompt],
+                config={
+                    'response_mime_type': 'application/json',
+                    'response_schema': KYCResult,
+                    'temperature': 0.1,
+                },
+            )
 
+        response = _retry_call(_call)
         result = KYCResult.model_validate_json(response.text)
     finally:
         # Clean up uploaded files

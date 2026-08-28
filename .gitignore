@@ -27,3 +27,18 @@ Thumbs.db
 
 # Archives / misc
 files.zip
+
+# Media files (test recordings, WhatsApp exports)
+*.mpeg
+*.mp3
+*.mp4
+*.jpeg
+*.jpg
+!frontend/src/assets/*
+
+# FaceFusion (local clone for deepfake generation)
+FaceFusion/
+
+# Model files (downloaded at runtime)
+backend/face_landmarker.task
+*.task

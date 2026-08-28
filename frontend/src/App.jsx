@@ -122,9 +122,14 @@ function App() {
     }
   }
 
+  const [revealedAction, setRevealedAction] = useState(null)
+  const [revealedPhrase, setRevealedPhrase] = useState(null)
+
   const startRecording = () => {
     setVideoUrl(null)
     setKycResult(null)
+    setRevealedAction(null)
+    setRevealedPhrase(null)
     chunksRef.current = []
     const stream = streamRef.current
     if (!stream) return
@@ -141,6 +146,16 @@ function App() {
     recorder.start()
     setIsRecording(true)
     setCountdown(7)
+
+    // Reveal action AFTER 1 second (recording is already capturing)
+    setTimeout(() => {
+      setRevealedAction(challenge.action)
+    }, 1000)
+
+    // Reveal spoken phrase AFTER 4 seconds (user has ~3s to say it)
+    setTimeout(() => {
+      setRevealedPhrase(challenge.spoken_phrase)
+    }, 4000)
   }
 
   const submitKyc = async (videoBlob) => {
@@ -191,7 +206,10 @@ function App() {
 
   return (
     <div className="App">
-      <h1>Project Medusa</h1>
+      <header className="app-header">
+        <h1>Argus — Project Medusa</h1>
+        <p className="subtitle">Challenge-response deepfake defense for payment flows</p>
+      </header>
 
       <nav className="tab-nav">
         <button className={`tab-btn ${tab === 'kyc' ? 'active' : ''}`} onClick={() => setTab('kyc')}>
@@ -212,8 +230,8 @@ function App() {
 
           {/* STEP 1: Enrollment */}
           <section className="step">
-            <h2>Step 1 — Enroll (Ground Truth)</h2>
-            <p className="hint">Capture your face and record your voice. These are used as the reference to match against.</p>
+            <h2><span className="step-number">1</span> Enroll Identity</h2>
+            <p className="hint">Capture your face and record your voice. These are used as the ground truth to match against.</p>
             <div className="enroll-grid">
               <div className="enroll-card">
                 <h3>Reference Face</h3>
@@ -247,7 +265,7 @@ function App() {
 
           {/* STEP 2: Challenge */}
           <section className="step">
-            <h2>Step 2 — Payment Challenge</h2>
+            <h2><span className="step-number">2</span> Payment Challenge</h2>
             {!enrolled && <p className="warn">Complete enrollment above first.</p>}
             <button onClick={fetchChallenge} className="primary-btn" disabled={!enrolled}>
               Get New Challenge
@@ -255,8 +273,21 @@ function App() {
 
             {challenge && (
               <div className="challenge-box">
-                <p className="instruction">{challenge.action}</p>
-                <p className="phrase">🗣️ Say: <strong>"{challenge.spoken_phrase}"</strong></p>
+                {!isRecording && (
+                  <p className="instruction">✅ Challenge ready. Press Start Recording — instructions will appear DURING recording.</p>
+                )}
+                {isRecording && !revealedAction && (
+                  <p className="instruction get-ready">👀 Get ready...</p>
+                )}
+                {isRecording && revealedAction && (
+                  <p className="instruction action-reveal">👉 {revealedAction}</p>
+                )}
+                {isRecording && revealedAction && !revealedPhrase && (
+                  <p className="phrase waiting-phrase">⏳ Spoken code coming...</p>
+                )}
+                {isRecording && revealedPhrase && (
+                  <p className="phrase phrase-reveal">🗣️ SAY NOW: <strong>"{revealedPhrase}"</strong></p>
+                )}
               </div>
             )}
 
@@ -279,7 +310,7 @@ function App() {
           {/* STEP 3: Result */}
           {(videoUrl || isVerifying || kycResult) && (
             <section className="step">
-              <h2>Step 3 — Verification Result</h2>
+              <h2><span className="step-number">3</span> Verification Result</h2>
               {videoUrl && <video src={videoUrl} controls className="preview-video" />}
 
               {isVerifying && (

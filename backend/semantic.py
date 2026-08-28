@@ -7,6 +7,21 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+
+
+def _retry_call(fn, max_retries=3, base_delay=3.0):
+    """Retry on 429 / RESOURCE_EXHAUSTED with exponential backoff."""
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except Exception as e:
+            if ("429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)) and attempt < max_retries - 1:
+                time.sleep(base_delay * (2 ** attempt))
+            else:
+                raise
+    return fn()
+
 
 def _wait_until_active(client, file_obj, timeout: int = 120, poll: float = 1.0):
     """Poll an uploaded file until it reaches ACTIVE state before use."""
@@ -50,15 +65,18 @@ def verify_semantic_video(video_path: str, instruction: str) -> SemanticResult:
     4. Did the described occlusion actually occur?
     """
     
-    response = client.models.generate_content(
-        model='gemini-3.6-flash',
-        contents=[video_file, prompt],
-        config={
-            'response_mime_type': 'application/json',
-            'response_schema': SemanticResult,
-            'temperature': 0.1
-        }
-    )
+    def _call():
+        return client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[video_file, prompt],
+            config={
+                'response_mime_type': 'application/json',
+                'response_schema': SemanticResult,
+                'temperature': 0.1
+            }
+        )
+
+    response = _retry_call(_call)
     
     client.files.delete(name=video_file.name)
     return SemanticResult.model_validate_json(response.text)
