@@ -148,11 +148,11 @@ This is the most important check. You must determine if this is a LIVE person
 or a REPLAY ATTACK (someone playing a pre-recorded video on a phone/screen).
 
 IMPORTANT CONTEXT: The challenge was revealed to the user DURING recording:
-- The physical action instruction appeared 1 second into the recording
-- The spoken phrase appeared 4 seconds into the recording
-Therefore, the user should NOT start the action in the very first second, and 
-should NOT speak the phrase before ~4 seconds in. If the action starts immediately 
-at frame 0 or the phrase is spoken in the first 3 seconds, this is strong evidence 
+- The physical action instruction appeared 2 seconds into the recording
+- The spoken phrase appeared 7 seconds into the recording
+Therefore, the user should NOT start the action in the very first 2 seconds, and 
+should NOT speak the phrase before ~7 seconds in. If the action starts immediately 
+at frame 0 or the phrase is spoken in the first 5 seconds, this is strong evidence 
 of a pre-recorded replay attack.
 
 Signs of a REPLAY ATTACK (any ONE = liveness FAIL):

@@ -1,5 +1,5 @@
 """
-Medusa Identity Graph — Tiered Network Fraud Detection
+Argus Identity Graph — Tiered Network Fraud Detection
 
 Design (per master plan Part 3):
 - HARD links: deterministic same-entity signals (phone, email, PAN/Aadhaar,
@@ -22,7 +22,7 @@ import time
 from datetime import datetime, timezone
 import networkx as nx
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "medusa_graph.db")
+DB_PATH = os.path.join(os.path.dirname(__file__), "argus_graph.db")
 
 HARD_LINK_TYPES = {"phone", "email", "pan", "aadhaar", "bank_account", "card_fingerprint"}
 SOFT_LINK_TYPES = {"device_fingerprint", "ip_address", "failed_liveness", "geolocation"}
@@ -40,7 +40,7 @@ def _now() -> float:
     return time.time()
 
 
-class MedusaIdentityGraph:
+class ArgusIdentityGraph:
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
         self.conn = sqlite3.connect(self.db_path)
@@ -202,16 +202,16 @@ class MedusaIdentityGraph:
         self.conn.close()
 
 
-def assess_transaction(user_id, signal_type, signal_value, liveness_result, medusa_artifact_score, graph: MedusaIdentityGraph):
-    """Risk decision engine (master plan Part 3)."""
+def assess_transaction(user_id, signal_type, signal_value, liveness_result, artifact_score, graph: ArgusIdentityGraph):
+    """Risk decision engine."""
     if liveness_result == "FAILED":
         graph.add_signal(user_id, "failed_liveness", signal_value, "soft", SOFT_WEIGHTS["failed_liveness"])
 
     tiers = graph.check_velocity_tiers(signal_type, signal_value)
     soft_score = graph.get_soft_link_score(signal_type, signal_value)
-    total_risk = soft_score * 0.3 + medusa_artifact_score * 0.7
+    total_risk = soft_score * 0.3 + artifact_score * 0.7
 
-    if tiers["tier1_triggered"] or medusa_artifact_score > 5.0:
+    if tiers["tier1_triggered"] or artifact_score > 5.0:
         decision = {"action": "BLOCK", "reason": "Bot-speed attack or high artifact score"}
     elif tiers["tier2_triggered"] or total_risk > 3.0:
         decision = {"action": "STEP_UP_CHALLENGE", "reason": "Suspicious pattern"}
@@ -223,7 +223,7 @@ def assess_transaction(user_id, signal_type, signal_value, liveness_result, medu
     decision.update({
         "tiers": tiers,
         "soft_score": soft_score,
-        "medusa_artifact_score": medusa_artifact_score,
+        "artifact_score": artifact_score,
         "total_risk": round(total_risk, 2),
     })
     return decision

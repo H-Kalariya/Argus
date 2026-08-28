@@ -5,7 +5,7 @@ Each scenario is a chronological list of events. Replaying events cumulatively
 reconstructs: the SQLite-style rows, the identity graph (nodes + edges), the
 velocity-tier counters, a running risk score, and the resulting decision.
 
-The logic mirrors graph_db.MedusaIdentityGraph exactly:
+The logic mirrors graph_db.ArgusIdentityGraph exactly:
   Tier 1 (bot-speed):   >= 3 signal events on one device within 15 min  -> BLOCK
   Tier 2 (human-speed): >= 2 accounts on one device within 24h          -> STEP_UP
   Tier 3 (long-game):   >= 3 accounts spread >= 3 days within a week     -> FLAG

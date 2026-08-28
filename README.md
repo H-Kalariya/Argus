@@ -1,9 +1,9 @@
-# Argus — Project Medusa
+# Argus
 
-**Physical challenge-response deepfake & fraud-ring defense for payment flows.**
+**Challenge-response deepfake & fraud-ring defense for payment flows.**
 
 Argus doesn't chase deepfake detection pixel-by-pixel. It forces every payment-flow
-attacker through short physical challenges that live face-swap pipelines cannot survive
+attacker through physical challenges that live face-swap pipelines cannot survive
 intact, verifies identity against enrolled ground-truth biometrics (face + voice), and
 correlates every event with a tiered identity graph that catches both bot-speed attacks
 and slow-moving mule networks.
@@ -12,70 +12,62 @@ Grounded in [GOTCHA: Real-Time Video Deepfake Detection via Challenge-Response](
 
 ---
 
-## Core Anti-Replay Mechanism: Delayed Challenge Reveal
+## Core Anti-Replay: Delayed Challenge Reveal
 
-The strongest liveness signal isn't a pixel-level detector — it's **unpredictability**.
+The strongest liveness signal is **unpredictability**, not pixel analysis.
 
 ```
-0s ─────── 1s ─────── 4s ─────── 7s (stop)
-│          │          │          │
-Recording  Action     Spoken     End
-starts     revealed   code
-(camera    on screen  revealed
- rolling)             on screen
+0s ─── 2s ─────── 7s ──────── 12s (stop)
+│      │          │           │
+Record Action     Spoken      End
+starts revealed   code
+       on screen  revealed
 ```
 
-- The challenge (action + spoken code) is generated **server-side** and revealed
-  **after recording has already started**.
-- A pre-recorded video cannot know the action or code (they didn't exist yet).
-- The random 4-digit spoken code appears at **4 seconds** — leaving only 3 seconds
-  to say it. Even a live attacker watching your screen can't react with the right voice.
-- Gemini verifies **timing**: if the action starts at frame 0 or the phrase is spoken
-  before ~4s, it's flagged as a replay.
+- The challenge is generated **server-side** and revealed **after recording starts**.
+- No re-recording allowed — one attempt per challenge, then a new challenge is required.
+- A pre-recorded video cannot predict the action or the random 4-digit code.
+- The spoken code appears at **7 seconds** — giving only 5s to say it.
+- Gemini checks **timing**: if the action/phrase appears too early, it's flagged.
 
 | Attack | Why it fails |
 |--------|-------------|
 | Pre-recorded video | Can't predict the action or code |
-| Replay of a past session | Different random code every time |
-| Someone watching your screen | Wrong voice, wrong face, <3s to react |
-| Live face-swap (DeepFace etc.) | Voice won't match + physical occlusion causes swap artifacts |
+| Replay of a past session | Different random code every time + no re-recording |
+| Someone watching your screen | Wrong voice, wrong face, limited reaction time |
+| Live face-swap | Voice won't match + physical occlusion breaks swap |
 
 ---
 
 ## Features
 
 ### 1. Biometric KYC Scanner
-- **Enrollment:** capture a reference face photo + record a reference voice sample (ground truth).
-- **Challenge-response:** randomized physical action + random 4-digit spoken code, revealed
-  incrementally during recording.
-- **Multimodal verification (Gemini):** compares challenge video against ground truth and returns:
+- **Enrollment:** capture a reference face photo + record a reference voice sample.
+- **Challenge-response:** randomized physical action + random 4-digit spoken code,
+  revealed incrementally during a **12-second** recording window.
+- **No re-recording:** one attempt per challenge — must fetch a new challenge to retry.
+- **Multimodal verification (Gemini):** compares challenge video against ground truth:
   - Face match + confidence
   - Voice / speaker match + confidence
   - Action performed (with timing check)
-  - Correct phrase spoken (exact transcription match)
-  - Liveness (replay indicators, timing analysis, audio quality)
+  - Correct phrase spoken (exact transcription)
+  - Liveness (replay indicators, timing analysis)
   - Overall pass/fail with reasoning
 
-Challenge actions are **unambiguous and mobile-friendly** (no left/right prompts) and create
-occlusion/motion that breaks live face-swap.
-
 ### 2. Fraud Network Command Center
-A live-forensics dashboard that replays fraud scenarios event-by-event across three panels:
-- **Left — Live Database:** SQLite rows appear in real time (newest flashes, fraud highlighted).
-- **Center — Identity Graph:** nodes/edges grow as connections form (hard links solid, soft dashed).
-- **Right — Decision Engine:** running risk meter, three velocity-tier counters, final action.
-
-Timeline scrubber with play/pause/step.
+A live-forensics dashboard that replays fraud scenarios event-by-event:
+- **Left — Live Database:** rows appear in real time
+- **Center — Identity Graph:** nodes/edges grow as connections form
+- **Right — Decision Engine:** risk meter, velocity-tier counters, final action
+- **Bottom — Timeline scrubber:** play/pause/step through events
 
 **Tiered velocity detection:**
 
 | Tier | Window | Catches | Action |
 |------|--------|---------|--------|
-| 1 — Bot-speed | 3+ events on one device in 15 min | Scripted creation / card testing | **BLOCK** |
+| 1 — Bot-speed | 3+ events on one device in 15 min | Scripted creation | **BLOCK** |
 | 2 — Human-speed | 2+ accounts on one device in 24h | Manual mule creation | **STEP-UP** |
-| 3 — Long-game | 3+ accounts sharing a fingerprint across days | Patient mule recruitment | **FLAG** |
-
-Hard links are deterministic; soft links accumulate evidence.
+| 3 — Long-game | 3+ accounts sharing fingerprint across days | Patient recruitment | **FLAG** |
 
 ---
 
@@ -83,14 +75,14 @@ Hard links are deterministic; soft links accumulate evidence.
 
 | Component | Technology |
 |-----------|-----------|
-| Frontend | React 19 + Vite, MediaRecorder API |
+| Frontend | React 19 + Vite |
 | Backend | Python FastAPI |
-| Multimodal AI | Google Gemini (configurable: `gemini-3.6-flash`, `gemini-3.5-flash-lite`) |
-| Identity graph | SQLite + NetworkX |
+| AI | Google Gemini (configurable model) |
+| Graph | SQLite + NetworkX |
 | Payments | Razorpay Test API |
 
-No torch, no tensorflow — biometric matching runs through Gemini's multimodal API.
-Automatic retry with exponential backoff on rate limits.
+No torch, no tensorflow. Biometric matching through Gemini multimodal API.
+Auto-retry with exponential backoff on rate limits.
 
 ---
 
@@ -100,18 +92,18 @@ Automatic retry with exponential backoff on rate limits.
 Argus/
 ├── backend/
 │   ├── main.py             # FastAPI app + all endpoints
-│   ├── semantic.py         # Gemini semantic liveness check (legacy endpoint)
 │   ├── kyc_verify.py       # Full KYC: face + voice + liveness vs ground truth
-│   ├── graph_db.py         # MedusaIdentityGraph (SQLite + NetworkX)
+│   ├── graph_db.py         # ArgusIdentityGraph (SQLite + NetworkX)
 │   ├── seed_data.py        # Seeds the four demo scenarios
-│   ├── scenario_events.py  # Event timelines for the command-center replay
-│   └── antispoof.py        # Local CV anti-spoof utilities (experimental)
+│   ├── scenario_events.py  # Event timelines for command-center replay
+│   ├── semantic.py         # Legacy semantic liveness endpoint
+│   └── antispoof.py        # Local CV utilities (experimental)
 ├── frontend/
 │   └── src/
 │       ├── App.jsx              # KYC scanner + tab navigation
-│       ├── App.css              # Scanner styles
+│       ├── App.css              # Scanner styles (dark premium theme)
 │       ├── NetworkDashboard.jsx # Fraud network command center
-│       └── NetworkDashboard.css # Command center dark theme
+│       └── NetworkDashboard.css # Command center styles
 ├── requirements.txt
 ├── .env.example
 └── .gitignore
@@ -123,7 +115,7 @@ Argus/
 
 ### Prerequisites
 - Python 3.11+ and Node 18+
-- A Google Gemini API key ([get one here](https://aistudio.google.com/apikey))
+- Google Gemini API key ([get one](https://aistudio.google.com/apikey))
 
 ### 1. Configure environment
 ```bash
@@ -132,20 +124,17 @@ cp .env.example .env
 Edit `.env`:
 ```
 GEMINI_API_KEY=your_key_here
-GEMINI_MODEL=gemini-3.5-flash-lite   # or gemini-3.6-flash
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
-**Tip:** Free tier is 20 requests/day per model per project. To get more:
-- Switch `GEMINI_MODEL` between `gemini-3.6-flash` and `gemini-3.5-flash-lite` (separate quotas).
-- Or create a new project at [AI Studio](https://aistudio.google.com/apikey) → "Create key in new project".
+**Quota tip:** Free tier = 20 req/day per model per project.
+Switch `GEMINI_MODEL` between models (separate quotas) or create a new project for fresh quota.
 
 ### 2. Backend
 ```bash
 python -m venv venv
-venv\Scripts\activate            # Windows
-# source venv/bin/activate       # macOS/Linux
+venv\Scripts\activate
 pip install -r requirements.txt
-
 cd backend
 python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
@@ -156,7 +145,6 @@ cd frontend
 npm install
 npm run dev
 ```
-Open the URL Vite prints (e.g. http://localhost:5173).
 
 ---
 
@@ -166,69 +154,45 @@ Open the URL Vite prints (e.g. http://localhost:5173).
 |--------|------|-------------|
 | GET | `/health` | Health check |
 | GET | `/challenge` | Generate a randomized challenge |
-| POST | `/verify/semantic` | Semantic liveness check (legacy) |
 | POST | `/verify/kyc` | Full KYC verification |
-| POST | `/graph/seed` | (Re)seed the demo identity graph |
+| POST | `/verify/semantic` | Semantic liveness (legacy) |
+| POST | `/graph/seed` | (Re)seed the demo graph |
 | GET | `/graph/scenarios` | Scenarios with live tier evaluation |
-| GET | `/graph/network` | Nodes + links + clusters |
+| GET | `/graph/network` | Full graph (nodes + links + clusters) |
 | GET | `/graph/timeline/scenarios` | Command-center scenario list |
-| GET | `/graph/events` | Flat chronological event log |
 | GET | `/graph/scenario/{id}/replay` | Step-by-step replay state |
 
 ---
 
 ## Demo Script
 
-### KYC Scanner (2-3 minutes)
+### KYC Scanner
 
-1. **Legitimate user:**
-   - Enroll (capture face + record voice)
-   - Click "Get Challenge" → Start Recording
-   - Action appears at 1s, spoken code at 4s → perform both
-   - Result: ✅ All checks pass → **Payment Authorized**
+1. **Legitimate user** — Enroll → Challenge → perform action + say code → ✅ Authorized
+2. **Replay attack** — Get new challenge (different code) → play old video → ❌ Wrong phrase
+3. **Different person** — Someone else attempts → ❌ Face + voice mismatch
 
-2. **Replay attack:**
-   - Record yourself doing a challenge, save the video
-   - Get a NEW challenge (different code!) → play the old video to the camera
-   - Result: ❌ Wrong spoken phrase (old code ≠ new code) → **Blocked**
+### Fraud Network
 
-3. **Different person:**
-   - Enroll yourself → have someone else attempt the challenge
-   - Result: ❌ Face mismatch + ❌ Voice mismatch → **Blocked**
-
-### Fraud Network Command Center (2-3 minutes)
-
-4. **Bot-speed attack:** 3 accounts in 10 min → Tier 1 fires → **BLOCK**
-5. **Human mule:** 2 accounts in 24h → Tier 2 → **STEP-UP**
-6. **Long-game ring:** 4 accounts over 5 days → Tier 3 → **FLAG**
+4. **Bot-speed** → 3 accounts in 10 min → Tier 1 → **BLOCK**
+5. **Human mule** → 2 accounts in 24h → Tier 2 → **STEP-UP**
+6. **Long-game ring** → 4 accounts over 5 days → Tier 3 → **FLAG**
 
 ---
 
-## Why This Design Wins
+## Why This Wins
 
-1. **Challenge unpredictability is the primary defense** — not pixel analysis. No detector
-   arms race, no model to retrain, no false positives on legitimate users.
-2. **Delayed reveal** makes pre-recording fundamentally impossible.
-3. **Multi-factor** (face + voice + liveness + correct phrase + timing) means an attacker
-   must defeat ALL checks simultaneously.
-4. **Three velocity tiers** catch fraud at bot speed, human speed, and patient-mule speed —
-   not one arbitrary threshold.
-5. **Fully buildable with standard tools** — no bespoke infra, no heavy ML, deployable today.
+1. **Unpredictability > pixel detection** — no arms race, no retraining needed.
+2. **No re-recording** — one shot per challenge, generated fresh each time.
+3. **Delayed reveal** — pre-recording is fundamentally impossible.
+4. **Multi-factor** — face + voice + action + phrase + timing must all pass.
+5. **Three velocity tiers** — catches fraud at every speed.
+6. **Zero heavy ML** — runs on any machine, deploys today.
 
 ---
 
-## Security Notes
+## Security
 
-- `.env` / `.env1` are gitignored. Only `.env.example` is tracked.
-- Face/voice data is sent to Gemini for the verification window only; uploaded files are
-  deleted immediately after processing.
-- Use test/fake identifiers for PAN/Aadhaar/bank fields in demos.
-
----
-
-## Roadmap
-
-- Local MediaPipe CV artifact layer (landmark jitter, edge flicker) as an offline anti-deepfake signal.
-- Razorpay payment flow integration (challenge gates the payment).
-- Migrate identity graph from SQLite/NetworkX to Neo4j/TigerGraph for production scale.
-- Labeled dataset of real vs. live-swap video under occlusion → trained lightweight classifier.
+- `.env` files are gitignored. Only `.env.example` is tracked.
+- Biometric data sent to Gemini for verification only; uploaded files deleted immediately.
+- Use test/fake identifiers for PAN/Aadhaar in demos.

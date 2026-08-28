@@ -117,6 +117,9 @@ function App() {
       setChallenge(data)
       setVideoUrl(null)
       setKycResult(null)
+      setHasRecorded(false)
+      setRevealedAction(null)
+      setRevealedPhrase(null)
     } catch (err) {
       console.error('Error fetching challenge:', err)
     }
@@ -124,6 +127,7 @@ function App() {
 
   const [revealedAction, setRevealedAction] = useState(null)
   const [revealedPhrase, setRevealedPhrase] = useState(null)
+  const [hasRecorded, setHasRecorded] = useState(false)
 
   const startRecording = () => {
     setVideoUrl(null)
@@ -141,21 +145,22 @@ function App() {
     recorder.onstop = async () => {
       const blob = new Blob(chunksRef.current, { type: (mime || 'video/webm').split(';')[0] })
       setVideoUrl(URL.createObjectURL(blob))
+      setHasRecorded(true)
       await submitKyc(blob)
     }
     recorder.start()
     setIsRecording(true)
-    setCountdown(7)
+    setCountdown(12)
 
-    // Reveal action AFTER 1 second (recording is already capturing)
+    // Reveal action AFTER 2 seconds
     setTimeout(() => {
       setRevealedAction(challenge.action)
-    }, 1000)
+    }, 2000)
 
-    // Reveal spoken phrase AFTER 4 seconds (user has ~3s to say it)
+    // Reveal spoken phrase AFTER 7 seconds (user has ~5s to say it)
     setTimeout(() => {
       setRevealedPhrase(challenge.spoken_phrase)
-    }, 4000)
+    }, 7000)
   }
 
   const submitKyc = async (videoBlob) => {
@@ -207,7 +212,7 @@ function App() {
   return (
     <div className="App">
       <header className="app-header">
-        <h1>Argus — Project Medusa</h1>
+        <h1>Argus</h1>
         <p className="subtitle">Challenge-response deepfake defense for payment flows</p>
       </header>
 
@@ -293,15 +298,17 @@ function App() {
 
             {challenge && (
               <div className="recording-controls">
-                {!isRecording ? (
+                {!isRecording && !hasRecorded ? (
                   <button onClick={startRecording} className="record-btn" disabled={!enrolled}>
                     Start Recording
                   </button>
-                ) : (
+                ) : isRecording ? (
                   <div className="recording-indicator">
                     <span className="dot pulse" /> Recording... {countdown}s
                     <button onClick={stopRecording} className="stop-btn ml-2">Stop Early</button>
                   </div>
+                ) : (
+                  <p className="hint">Recording complete. Get a new challenge to try again.</p>
                 )}
               </div>
             )}

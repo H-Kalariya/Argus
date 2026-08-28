@@ -5,7 +5,7 @@ import tempfile
 import os
 from semantic import verify_semantic_video
 from kyc_verify import verify_kyc
-from graph_db import MedusaIdentityGraph, assess_transaction
+from graph_db import ArgusIdentityGraph, assess_transaction
 from seed_data import seed
 import scenario_events
 
@@ -222,8 +222,8 @@ SCENARIOS = {
 }
 
 
-def _get_graph() -> MedusaIdentityGraph:
-    return MedusaIdentityGraph()
+def _get_graph() -> ArgusIdentityGraph:
+    return ArgusIdentityGraph()
 
 
 @app.post("/graph/seed")

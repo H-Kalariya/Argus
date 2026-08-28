@@ -1,5 +1,5 @@
 """
-Seed the Medusa identity graph with demo scenarios showcasing each attack tier.
+Seed the Argus identity graph with demo scenarios showcasing each attack tier.
 
 Scenarios:
   A) Legitimate users      -> no triggers, APPROVE
@@ -11,14 +11,14 @@ All identifiers are fake/test values.
 """
 
 import time
-from graph_db import MedusaIdentityGraph
+from graph_db import ArgusIdentityGraph
 
 HOUR = 3600
 DAY = 24 * HOUR
 MIN = 60
 
 
-def seed(graph: MedusaIdentityGraph):
+def seed(graph: ArgusIdentityGraph):
     graph.reset()
     now = time.time()
 
@@ -88,7 +88,7 @@ def seed(graph: MedusaIdentityGraph):
 
 
 if __name__ == "__main__":
-    g = MedusaIdentityGraph()
+    g = ArgusIdentityGraph()
     keys = seed(g)
     print("Seeded scenarios:")
     for name, (stype, sval) in keys.items():
